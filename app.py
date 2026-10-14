@@ -10,19 +10,41 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-.stApp {
-    background-color: #F3F5FF;
+.stApp,
+[data-testid="stAppViewContainer"] {
+    background: #F3F5FF !important;
+    color: #26315F !important;
 }
+
+.stApp h1,
+.stApp h2,
+.stApp h3,
+.stApp p,
+.stApp label,
+.stApp [data-testid="stMarkdownContainer"] {
+    color: #26315F !important;
+}
+
 h1 {
-    color: #343A78;
     text-align: center;
 }
-h2, h3 {
-    color: #343A78;
-}
+
 div.stButton > button {
-    border-radius: 14px;
+    background: #FFFFFF !important;
+    color: #26315F !important;
+    border: 2px solid #D8DDFC !important;
+    border-radius: 14px !important;
     min-height: 45px;
+    font-weight: bold;
+}
+
+div.stButton > button:hover {
+    background: #E7EAFE !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
     font-weight: bold;
 }
 </style>
