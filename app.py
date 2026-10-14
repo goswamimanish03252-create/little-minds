@@ -1,3 +1,4 @@
+
 import random
 import streamlit as st
 
@@ -79,6 +80,12 @@ if "scores" not in st.session_state:
 if "selected_colour" not in st.session_state:
     st.session_state.selected_colour = None
 
+if "answered" not in st.session_state:
+    st.session_state.answered = False
+
+if "feedback" not in st.session_state:
+    st.session_state.feedback = ""
+
 
 # ================= QUESTION SETUP =================
 
@@ -90,6 +97,11 @@ def setup_question(game):
         st.session_state.target = random.choice(
             list(COLOURS)
         )
+
+        # Shuffle options only when a new question starts.
+        st.session_state.colour_options = list(COLOURS)
+        random.shuffle(st.session_state.colour_options)
+
         st.session_state.selected_colour = None
 
     elif game == "Shapes":
@@ -210,15 +222,15 @@ elif st.session_state.page == "Colours":
 
     target = st.session_state.target
 
-    # Target colour ka naam sirf upar dikhega.
     st.subheader(f"Find the {target} colour!")
 
     st.write(
         f"Points: {st.session_state.scores['Colours']}"
     )
 
-    options = list(COLOURS)
-    random.shuffle(options)
+    # FIX: Use the saved options instead of shuffling
+    # them on every Streamlit rerun.
+    options = st.session_state.colour_options
 
     cols = st.columns(2)
 
@@ -236,8 +248,6 @@ elif st.session_state.page == "Colours":
                 else "3px solid white"
             )
 
-            # Coloured box hamesha visible rahega.
-            # Selection par uske around border dikhega.
             st.markdown(
                 f"""
                 <div style="
@@ -253,7 +263,6 @@ elif st.session_state.page == "Colours":
                 unsafe_allow_html=True
             )
 
-            # Button answer select karta hai.
             if st.button(
                 f"Select {colour}",
                 key=f"colour_{colour}",
