@@ -2,17 +2,9 @@
 import streamlit as st
 import sqlite3
 import hashlib
-import secrets
 import hmac
 import os
 import random
-import csv
-import io
-from datetime import datetime
-
-# ==========================================
-# LITTLE MINDS - COMPLETE SINGLE FILE APP
-# ==========================================
 
 st.set_page_config(
     page_title="Little Minds",
@@ -22,810 +14,380 @@ st.set_page_config(
 
 DB = "little_minds.db"
 
-COLORS = {
-    "RED": "#EF4444",
-    "BLUE": "#3B82F6",
-    "GREEN": "#22C55E",
-    "YELLOW": "#FACC15",
-    "PURPLE": "#A855F7",
-    "ORANGE": "#F97316"
-}
-
-SHAPES = {
-    "CIRCLE": "🔵",
-    "SQUARE": "🟦",
-    "TRIANGLE": "🔺",
-    "STAR": "⭐"
-}
-
-ANIMALS = ["🐶", "🐱", "🐸", "🦊"]
-
-# ==========================================
-# DATABASE SETUP
-# ==========================================
-
-def database():
-    con = sqlite3.connect(DB)
-    con.row_factory = sqlite3.Row
-    return con
-
-
-def setup_database():
-    with database() as con:
-        con.execute("""
-        CREATE TABLE IF NOT EXISTS students (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            salt TEXT NOT NULL,
-            class_name TEXT NOT NULL,
-            guardian_email TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        )
-        """)
-
-        con.execute("""
-        CREATE TABLE IF NOT EXISTS scores (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id INTEGER NOT NULL,
-            game TEXT NOT NULL,
-            score INTEGER NOT NULL,
-            played_at TEXT NOT NULL,
-            FOREIGN KEY(student_id) REFERENCES students(id)
-        )
-        """)
-
-
-setup_database()
-
-# ==========================================
-# PASSWORD SECURITY
-# ==========================================
-
-def hash_password(password, salt=None):
-    salt = salt or secrets.token_bytes(16)
-
-    hashed = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode(),
-        salt,
-        200000
-    )
-
-    return hashed.hex(), salt.hex()
-
-
-def verify_password(password, saved_hash, salt_hex):
-    calculated, _ = hash_password(
-        password,
-        bytes.fromhex(salt_hex)
-    )
-
-    return hmac.compare_digest(calculated, saved_hash)
-
-
-# ==========================================
-# SESSION STATE
-# ==========================================
-
-defaults = {
-    "student": None,
-    "admin": False,
-    "page": "Home",
-    "colour_target": "YELLOW",
-    "shape_target": "CIRCLE",
-    "count_target": 3,
-    "memory_cards": [],
-    "memory_target": None,
-    "memory_found": [],
-    "memory_score_saved": False
-}
-
-for key, value in defaults.items():
-    if key not in st.session_state:
-        st.session_state[key] = value
-
-
-# ==========================================
-# SAVE STUDENT PROGRESS
-# ==========================================
-
-def save_score(game, points=1):
-    student = st.session_state.student
-
-    if student is None:
-        return
-
-    with database() as con:
-        con.execute("""
-        INSERT INTO scores
-        (student_id, game, score, played_at)
-        VALUES (?, ?, ?, ?)
-        """, (
-            student["id"],
-            game,
-            points,
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        ))
-
-
-# ==========================================
-# WEBSITE STYLE
-# ==========================================
-
+# ---------- DESIGN ----------
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap');
-
-html, body, [class*="css"] {
-    font-family: 'Nunito', sans-serif;
-}
-
 .stApp {
-    background: linear-gradient(
-        135deg, #FFF8E8, #F1F6FF, #F0FFF4
-    );
+    background: linear-gradient(135deg,#f4f8ff,#fff8fb);
+    color: #25365f;
 }
-
-.block-container {
-    max-width: 1200px;
-    padding-top: 1.5rem;
+[data-testid="stSidebar"] {
+    background: #eef2ff;
 }
-
+h1,h2,h3 {color:#493b91;}
+.block-container {padding-top:1.5rem;max-width:1300px;}
+div.stButton>button, div.stFormSubmitButton>button {
+    background:#7658ed;color:white;border:0;
+    border-radius:12px;min-height:42px;font-weight:800;
+}
 .hero {
-    background: linear-gradient(
-        120deg, #FFE5AD, #FFD9EA, #DDEAFF
-    );
-    padding: 35px;
-    border-radius: 25px;
-    text-align: center;
+    background:linear-gradient(110deg,#d7f2ff,#f1e5ff,#ffe4ef);
+    border-radius:22px;padding:25px;text-align:center;
+    border:1px solid #d9e9ff;margin-bottom:18px;
 }
-
-.hero h1 {
-    color: #26345A;
-    font-weight: 900;
-    font-size: clamp(32px, 5vw, 55px);
+.hero h1 {font-size:42px;margin:0;}
+.tile {
+    border-radius:18px;padding:18px 10px;
+    text-align:center;min-height:150px;margin-bottom:12px;
 }
-
-.hero p {
-    color: #475569;
-    font-size: 18px;
+.pink {background:#ffd8e9;}
+.green {background:#d8f8d0;}
+.yellow {background:#fff0bd;}
+.purple {background:#e8ddff;}
+.panel {
+    background:white;border:1px solid #dce8ff;
+    border-radius:18px;padding:20px;
 }
-
-.game-card {
-    background: white;
-    padding: 20px;
-    border-radius: 20px;
-    text-align: center;
-    border: 1px solid #E8ECF5;
-    box-shadow: 0 5px 20px #0000000A;
-    margin-bottom: 12px;
-}
-
-div.stButton > button {
-    border-radius: 13px;
-    font-weight: 800;
-    min-height: 42px;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
+# ---------- DATABASE ----------
+def connect():
+    return sqlite3.connect(DB, timeout=10)
 
-# ==========================================
-# HEADER
-# ==========================================
+with connect() as con:
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS students(
+            username TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            grade TEXT NOT NULL,
+            salt TEXT NOT NULL,
+            password_hash TEXT NOT NULL
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS scores(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            game TEXT NOT NULL,
+            points INTEGER DEFAULT 1
+        )
+    """)
 
-left, right = st.columns([4, 1])
+def make_hash(password, salt):
+    return hashlib.pbkdf2_hmac(
+        "sha256", password.encode(), salt.encode(), 200000
+    ).hex()
 
-with left:
-    st.markdown("## 🌈 Little Minds")
+def save_score(game):
+    with connect() as con:
+        con.execute(
+            "INSERT INTO scores(username,game) VALUES(?,?)",
+            (st.session_state.user, game)
+        )
 
-with right:
-    if st.session_state.student:
-        st.write("👋 " + st.session_state.student["name"])
+if "user" not in st.session_state:
+    st.session_state.user = None
+if "question" not in st.session_state:
+    st.session_state.question = None
+if "feedback" not in st.session_state:
+    st.session_state.feedback = None
+if "admin_ok" not in st.session_state:
+    st.session_state.admin_ok = False
 
-        if st.button("Logout"):
-            st.session_state.student = None
-            st.session_state.page = "Home"
-            st.rerun()
-
-
-# ==========================================
-# NAVIGATION
-# ==========================================
-
-PAGES = [
-    "Home",
-    "Create Account",
-    "Student Login",
-    "Student Dashboard",
-    "Colour Quest",
-    "Shape Safari",
-    "Counting Garden",
-    "Memory Match",
-    "Admin Panel"
-]
-
+# ---------- SIDEBAR ----------
 with st.sidebar:
-    st.title("🧸 Learning Menu")
-
-    page = st.radio(
-        "Choose a section",
-        PAGES,
-        index=PAGES.index(st.session_state.page)
-        if st.session_state.page in PAGES else 0
-    )
-
-    st.session_state.page = page
-
+    st.markdown("<h1 style='text-align:center'>🎓 Little Minds</h1>",
+                unsafe_allow_html=True)
+    st.caption("Learn • Play • Grow")
+    page = st.radio("Navigate", [
+        "🏠 Home", "📝 Register", "🔐 Login",
+        "🎮 Learning Games", "📊 My Dashboard",
+        "🛡️ Admin Panel"
+    ])
     st.divider()
-
-    st.caption("PG • Nursery • LKG • UKG")
-
-
-# ==========================================
-# HOME PAGE
-# ==========================================
-
-if page == "Home":
-
+    if st.session_state.user:
+        st.success("Logged in")
+        if st.button("Log out"):
+            st.session_state.user = None
+            st.rerun()
+    else:
+        st.info("👤 Guest")
     st.markdown("""
-    <div class="hero">
-        <h1>Curious Minds. Happy Discoveries! 🌈</h1>
-        <p>Learn • Play • Explore • Grow</p>
-        <p>Fun learning for PG, Nursery, LKG and UKG.</p>
+    <div style="background:#e5edff;padding:18px;
+    border-radius:15px;text-align:center">
+    ⭐ 🌈 ⭐<br><b>Small steps today,<br>
+    big dreams tomorrow!</b>
     </div>
     """, unsafe_allow_html=True)
 
-    st.write("")
+# ---------- HOME ----------
+if page == "🏠 Home":
+    st.markdown("""
+    <div class="hero">
+      <div style="font-size:35px">🌈 🦋 ☀️</div>
+      <h1>Welcome to Little Minds!</h1>
+      <h3>A fun learning platform for Nursery, LKG & UKG</h3>
+      <div style="font-size:35px">🧒🏻 👧🏻 🎈</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    columns = st.columns(4)
-
-    games = [
-        ("🎨", "Colour Quest", "Learn colours"),
-        ("🔷", "Shape Safari", "Explore shapes"),
-        ("🔢", "Counting Garden", "Learn numbers"),
-        ("🧠", "Memory Match", "Train your memory")
+    cols = st.columns(4)
+    cards = [
+        ("🔤 ABC","Alphabet Adventure","Learn letters","pink"),
+        ("🔢 123","Counting Garden","Count and grow","green"),
+        ("🔴 🔺","Shapes & Colours","Explore the world","yellow"),
+        ("🧠 ⭐","Memory Match","Train your memory","purple")
     ]
-
-    for col, game in zip(columns, games):
+    for col, card in zip(cols, cards):
         with col:
+            icon, title, desc, colour = card
             st.markdown(f"""
-            <div class="game-card">
-                <h1>{game[0]}</h1>
-                <h3>{game[1]}</h3>
-                <p>{game[2]}</p>
+            <div class="tile {colour}">
+            <h1>{icon}</h1><h3>{title}</h3><p>{desc}</p>
             </div>
             """, unsafe_allow_html=True)
 
-    st.subheader("📚 Choose Your Learning Level")
+    a, b = st.columns(2)
+    with a:
+        st.markdown("""
+        <div class="panel">
+        <h3>🚀 Quick Start</h3>
+        🟢 Create your student account<br><br>
+        🔵 Choose your class<br><br>
+        🟣 Play fun learning games<br><br>
+        🟠 Track your progress ⭐
+        </div>
+        """, unsafe_allow_html=True)
+    with b:
+        st.markdown("""
+        <div class="panel">
+        <h3>🏆 Latest Highlights</h3>
+        ✅ Colourful learning games<br><br>
+        ✅ Personal progress dashboard<br><br>
+        ✅ Fun questions for little learners<br><br>
+        ✅ Celebrate every correct answer!
+        </div>
+        """, unsafe_allow_html=True)
 
-    c1, c2, c3, c4 = st.columns(4)
-
-    for col, level, emoji in zip(
-        [c1, c2, c3, c4],
-        ["PG", "Nursery", "LKG", "UKG"],
-        ["🧸", "🌱", "✏️", "🚀"]
-    ):
-        with col:
-            st.info(f"{emoji} **{level}**")
-
-    st.caption(
-        "These are starter activities, not a complete official syllabus."
+    st.markdown("---")
+    st.markdown(
+        "<center>💜 Little Minds • Learn • Play • Grow</center>",
+        unsafe_allow_html=True
     )
 
+# ---------- REGISTER ----------
+elif page == "📝 Register":
+    st.markdown("""
+    <div class="hero"><h1>🌟 Create Your Account</h1>
+    <p>Ask a parent or guardian to help with registration.</p></div>
+    """, unsafe_allow_html=True)
 
-# ==========================================
-# REGISTRATION
-# ==========================================
-
-elif page == "Create Account":
-
-    st.title("🧸 Create Student Account")
-
-    st.info(
-        "A parent or guardian should complete registration "
-        "and provide consent for a young child."
-    )
-
-    with st.form("registration"):
-
-        name = st.text_input("Student name or nickname")
-        email = st.text_input("Account email")
-        guardian = st.text_input("Parent/guardian email")
-
-        level = st.selectbox(
-            "Choose class",
-            ["PG", "Nursery", "LKG", "UKG"]
+    with st.form("register"):
+        name = st.text_input("Student name")
+        username = st.text_input("Choose username").strip().lower()
+        grade = st.selectbox(
+            "Class", ["Play Group","Nursery","LKG","UKG"]
         )
-
-        password = st.text_input(
-            "Password (minimum 10 characters)",
-            type="password"
+        password = st.text_input("Password", type="password")
+        confirm = st.text_input("Confirm password", type="password")
+        approved = st.checkbox(
+            "My parent/guardian has approved this account."
         )
-
-        consent = st.checkbox(
-            "I am the parent/guardian and consent to creating this account."
-        )
-
-        submit = st.form_submit_button("Create Account")
+        submit = st.form_submit_button("Create Account 🌈")
 
     if submit:
-
-        if not name.strip():
-            st.error("Enter the student's name.")
-
-        elif "@" not in email or "." not in email.split("@")[-1]:
-            st.error("Enter a valid account email.")
-
-        elif "@" not in guardian or "." not in guardian.split("@")[-1]:
-            st.error("Enter a valid guardian email.")
-
-        elif len(password) < 10:
-            st.error("Password must be at least 10 characters.")
-
-        elif not consent:
-            st.error("Guardian consent is required.")
-
+        if not name.strip() or len(username) < 3:
+            st.error("Enter a name and username of at least 3 characters.")
+        elif len(password) < 8:
+            st.error("Password must have at least 8 characters.")
+        elif password != confirm:
+            st.error("Passwords do not match.")
+        elif not approved:
+            st.warning("Please ask your parent/guardian for approval.")
         else:
-            password_hash, salt = hash_password(password)
-
+            salt = os.urandom(16).hex()
             try:
-                with database() as con:
+                with connect() as con:
                     con.execute("""
-                    INSERT INTO students
-                    (name, email, password_hash, salt,
-                     class_name, guardian_email, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        name.strip(),
-                        email.strip().lower(),
-                        password_hash,
-                        salt,
-                        level,
-                        guardian.strip().lower(),
-                        datetime.now().isoformat(timespec="seconds")
-                    ))
-
-                st.success(
-                    "Account created! Open Student Login to continue."
-                )
-
+                        INSERT INTO students
+                        VALUES(?,?,?,?,?)
+                    """, (username, name.strip(), grade, salt,
+                          make_hash(password, salt)))
+                st.success("Account created! Now open Login.")
             except sqlite3.IntegrityError:
-                st.error("This account email is already registered.")
+                st.error("That username is already taken.")
 
-
-# ==========================================
-# STUDENT LOGIN
-# ==========================================
-
-elif page == "Student Login":
-
-    st.title("🔐 Student Login")
+# ---------- LOGIN ----------
+elif page == "🔐 Login":
+    st.markdown("""
+    <div class="hero"><h1>🐻 Welcome Back!</h1>
+    <p>Continue your learning journey.</p></div>
+    """, unsafe_allow_html=True)
 
     with st.form("login"):
-
-        email = st.text_input("Account email")
-
-        password = st.text_input(
-            "Password",
-            type="password"
-        )
-
-        submit = st.form_submit_button("Sign In")
+        username = st.text_input("Username").strip().lower()
+        password = st.text_input("Password", type="password")
+        submit = st.form_submit_button("Login 🚀")
 
     if submit:
+        with connect() as con:
+            row = con.execute(
+                "SELECT salt,password_hash FROM students WHERE username=?",
+                (username,)
+            ).fetchone()
 
-        with database() as con:
-            student = con.execute("""
-            SELECT * FROM students WHERE email = ?
-            """, (email.strip().lower(),)).fetchone()
-
-        if student and verify_password(
-            password,
-            student["password_hash"],
-            student["salt"]
+        if row and hmac.compare_digest(
+            make_hash(password, row[0]), row[1]
         ):
-
-            st.session_state.student = dict(student)
-            st.session_state.page = "Student Dashboard"
-
-            st.success("Login successful!")
+            st.session_state.user = username
+            st.session_state.question = None
             st.rerun()
-
         else:
-            st.error("Incorrect email or password.")
+            st.error("Incorrect username or password.")
 
+# ---------- GAMES ----------
+elif page == "🎮 Learning Games":
+    st.markdown("""
+    <div class="hero"><h1>🎮 Learning Adventures</h1>
+    <p>Every question is a new little victory!</p></div>
+    """, unsafe_allow_html=True)
 
-# ==========================================
-# STUDENT DASHBOARD
-# ==========================================
-
-elif page == "Student Dashboard":
-
-    if not st.session_state.student:
-
-        st.warning("Please sign in first.")
-
+    if not st.session_state.user:
+        st.info("Please login first to save your scores.")
     else:
-
-        student = st.session_state.student
-
-        st.title(f"Hello, {student['name']}! 👋")
-
-        st.write(f"**Your class:** {student['class_name']}")
-
-        with database() as con:
-            records = con.execute("""
-            SELECT game, score, played_at
-            FROM scores
-            WHERE student_id = ?
-            ORDER BY id DESC
-            """, (student["id"],)).fetchall()
-
-        total = sum(record["score"] for record in records)
-
-        a, b, c = st.columns(3)
-
-        a.metric("Activities completed", len(records))
-        b.metric("Total points", total)
-        c.metric(
-            "Best points",
-            max([r["score"] for r in records], default=0)
-        )
-
-        st.subheader("📊 Recent Learning Activity")
-
-        if records:
-            st.dataframe(
-                [
-                    {
-                        "Game": r["game"],
-                        "Points": r["score"],
-                        "Date": r["played_at"]
-                    }
-                    for r in records
-                ],
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
-            st.info("Play a game to start tracking your progress!")
-
-
-# ==========================================
-# COLOUR QUEST
-# ==========================================
-
-elif page == "Colour Quest":
-
-    st.title("🎨 Colour Quest")
-
-    if not st.session_state.student:
-        st.warning("Please sign in first.")
-
-    else:
-
-        target = st.session_state.colour_target
-
-        st.subheader(f"Find the {target} colour!")
-
-        st.write("Tap the correct coloured box.")
-
-        names = list(COLORS.keys())
-        cols = st.columns(3)
-
-        for i, name in enumerate(names):
-
-            with cols[i % 3]:
-
-                st.markdown(
-                    f"""
-                    <div style="
-                        height:95px;
-                        border-radius:18px;
-                        background:{COLORS[name]};
-                        border:3px solid white;
-                        margin-bottom:8px;">
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-                if st.button(
-                    "Choose this colour",
-                    key=f"color_{i}_{target}",
-                    use_container_width=True
-                ):
-
-                    if name == target:
-                        save_score("Colour Quest")
-                        st.success("Correct! Great job! 🎉")
-                    else:
-                        st.error("Try again!")
-
-        if st.button("Next Colour"):
-            st.session_state.colour_target = random.choice(names)
-            st.rerun()
-
-
-# ==========================================
-# SHAPE SAFARI
-# ==========================================
-
-elif page == "Shape Safari":
-
-    st.title("🔷 Shape Safari")
-
-    if not st.session_state.student:
-        st.warning("Please sign in first.")
-
-    else:
-
-        target = st.session_state.shape_target
-
-        st.subheader(f"Find the {target}!")
-
-        cols = st.columns(4)
-
-        for i, (shape, emoji) in enumerate(SHAPES.items()):
-
-            with cols[i]:
-
-                st.markdown(
-                    f"<h1 style='text-align:center'>{emoji}</h1>",
-                    unsafe_allow_html=True
-                )
-
-                if st.button(shape, key=f"shape_{i}"):
-
-                    if shape == target:
-                        save_score("Shape Safari")
-                        st.success("Correct shape! ⭐")
-                    else:
-                        st.error("Try again!")
-
-        if st.button("Next Shape"):
-            st.session_state.shape_target = random.choice(
-                list(SHAPES.keys())
-            )
-            st.rerun()
-
-
-# ==========================================
-# COUNTING GARDEN
-# ==========================================
-
-elif page == "Counting Garden":
-
-    st.title("🔢 Counting Garden")
-
-    if not st.session_state.student:
-        st.warning("Please sign in first.")
-
-    else:
-
-        target = st.session_state.count_target
-
-        st.subheader("Count the apples!")
-
-        st.markdown(
-            f"<h1>{'🍎 ' * target}</h1>",
-            unsafe_allow_html=True
-        )
-
-        options = sorted(set([
-            target,
-            max(1, target - 1),
-            min(10, target + 1),
-            random.randint(1, 10)
-        ]))
-
-        cols = st.columns(len(options))
-
-        for i, number in enumerate(options):
-
-            with cols[i]:
-
-                if st.button(
-                    str(number),
-                    key=f"count_{target}_{i}_{number}"
-                ):
-
-                    if number == target:
-                        save_score("Counting Garden")
-                        st.success("Correct counting! 🎉")
-                    else:
-                        st.error("Count the apples again.")
-
-        if st.button("Next Counting Round"):
-            st.session_state.count_target = random.randint(1, 10)
-            st.rerun()
-
-
-# ==========================================
-# MEMORY MATCH
-# ==========================================
-
-elif page == "Memory Match":
-
-    st.title("🧠 Memory Match")
-
-    if not st.session_state.student:
-        st.warning("Please sign in first.")
-
-    else:
-
-        if not st.session_state.memory_cards:
-            cards = random.sample(ANIMALS, 4)
-            st.session_state.memory_cards = cards
-            st.session_state.memory_target = random.choice(cards)
-
-        target = st.session_state.memory_target
-
-        st.subheader(f"Find this animal: {target}")
-
-        cols = st.columns(4)
-
-        for i, animal in enumerate(st.session_state.memory_cards):
-
-            with cols[i]:
-
-                st.markdown(
-                    f"<h1 style='text-align:center'>{animal}</h1>",
-                    unsafe_allow_html=True
-                )
-
-                if st.button("Choose", key=f"animal_{i}"):
-
-                    if animal == target:
-                        save_score("Memory Match")
-                        st.success("You remembered it! 🧠")
-                    else:
-                        st.error("Try another animal.")
-
-        if st.button("New Memory Round"):
-            cards = random.sample(ANIMALS, 4)
-            st.session_state.memory_cards = cards
-            st.session_state.memory_target = random.choice(cards)
-            st.rerun()
-
-
-# ==========================================
-# ADMIN PANEL
-# ==========================================
-
-elif page == "Admin Panel":
-
-    st.title("🛡️ Admin Dashboard")
-
-    admin_password = os.environ.get(
-        "LITTLE_MINDS_ADMIN_PASSWORD", ""
-    )
-
-    if not admin_password:
-
-        st.warning(
-            "Admin login is disabled. Set the "
-            "LITTLE_MINDS_ADMIN_PASSWORD environment variable."
-        )
-
-    elif not st.session_state.admin:
-
-        entered = st.text_input(
-            "Admin password",
-            type="password"
-        )
-
-        if st.button("Admin Login"):
-
-            if hmac.compare_digest(entered, admin_password):
-                st.session_state.admin = True
-                st.rerun()
+        game = st.selectbox("Choose a game", [
+            "Colour Quest", "Shape Safari",
+            "Counting Garden", "Alphabet Adventure"
+        ])
+
+        if (st.session_state.question is None or
+            st.session_state.question["game"] != game):
+            if game == "Colour Quest":
+                q = ("What colour is a ripe banana? 🍌",
+                     ["Blue","Yellow","Purple","Green"], "Yellow")
+            elif game == "Shape Safari":
+                q = ("Which shape has three sides? 🔺",
+                     ["Circle","Triangle","Square"], "Triangle")
+            elif game == "Alphabet Adventure":
+                q = ("Which letter comes after B?",
+                     ["A","C","D","E"], "C")
             else:
+                n = random.randint(2,8)
+                q = (f"Count the flowers: {'🌼 ' * n}",
+                     [str(i) for i in range(1,10)], str(n))
+
+            st.session_state.question = {
+                "game": game, "prompt": q[0],
+                "options": q[1], "answer": q[2]
+            }
+            st.session_state.feedback = None
+
+        q = st.session_state.question
+        st.markdown('<div class="panel">', unsafe_allow_html=True)
+        st.subheader(q["prompt"])
+        answer = st.radio("Choose your answer:", q["options"])
+
+        if st.button("Check Answer ⭐"):
+            if answer == q["answer"]:
+                save_score(game)
+                st.session_state.feedback = "correct"
+            else:
+                st.session_state.feedback = "try"
+
+        if st.session_state.feedback == "correct":
+            st.success("Correct! Great job! 🎉")
+            if st.button("Next Question ➜"):
+                st.session_state.question = None
+                st.session_state.feedback = None
+                st.rerun()
+        elif st.session_state.feedback == "try":
+            st.warning("Good try! Have another go.")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# ---------- DASHBOARD ----------
+elif page == "📊 My Dashboard":
+    st.markdown("""
+    <div class="hero"><h1>📊 My Learning Dashboard</h1>
+    <p>Look how much you have learned!</p></div>
+    """, unsafe_allow_html=True)
+
+    if not st.session_state.user:
+        st.info("Login to see your progress.")
+    else:
+        with connect() as con:
+            student = con.execute(
+                "SELECT name,grade FROM students WHERE username=?",
+                (st.session_state.user,)
+            ).fetchone()
+            scores = con.execute("""
+                SELECT game,SUM(points) FROM scores
+                WHERE username=? GROUP BY game
+            """, (st.session_state.user,)).fetchall()
+
+        if student:
+            st.subheader(f"👋 Hello, {student[0]}!")
+            st.write("Class:", student[1])
+            total = sum(points for _, points in scores)
+            a, b = st.columns(2)
+            a.metric("Correct Answers ⭐", total)
+            b.metric("Games Played 🎮", len(scores))
+
+            st.subheader("🌱 Your Game Progress")
+            if scores:
+                for game, points in scores:
+                    st.info(f"🎯 {game}: {points} points")
+            else:
+                st.write("Play a game to start earning points!")
+
+# ---------- ADMIN ----------
+elif page == "🛡️ Admin Panel":
+    st.markdown("""
+    <div class="hero"><h1>🛡️ Admin Panel</h1>
+    <p>Review student accounts and game scores.</p></div>
+    """, unsafe_allow_html=True)
+
+    admin_password = os.environ.get("LITTLE_MINDS_ADMIN_PASSWORD")
+    if not admin_password:
+        st.warning(
+            "Admin is not configured. Ask a trusted adult to set "
+            "LITTLE_MINDS_ADMIN_PASSWORD before using this panel."
+        )
+    else:
+        entered = st.text_input("Admin password", type="password")
+        if st.button("Unlock Admin Panel"):
+            st.session_state.admin_ok = hmac.compare_digest(
+                entered, admin_password
+            )
+            if not st.session_state.admin_ok:
                 st.error("Incorrect admin password.")
 
-    else:
+        if st.session_state.admin_ok:
+            with connect() as con:
+                students = con.execute(
+                    "SELECT username,name,grade FROM students"
+                ).fetchall()
+                scores = con.execute("""
+                    SELECT username,game,SUM(points)
+                    FROM scores GROUP BY username,game
+                """).fetchall()
 
-        if st.button("Admin Logout"):
-            st.session_state.admin = False
-            st.rerun()
+            st.subheader("👩‍🎓 Registered Students")
+            st.dataframe(students, use_container_width=True)
+            st.subheader("🎮 Game Scores")
+            st.dataframe(scores, use_container_width=True)
 
-        with database() as con:
-
-            students = con.execute("""
-            SELECT name, email, class_name,
-                   guardian_email, created_at
-            FROM students ORDER BY id DESC
-            """).fetchall()
-
-            scores = con.execute("""
-            SELECT students.name, students.class_name,
-                   scores.game, scores.score, scores.played_at
-            FROM scores
-            JOIN students ON students.id = scores.student_id
-            ORDER BY scores.id DESC
-            """).fetchall()
-
-        st.metric("Registered students", len(students))
-
-        st.subheader("👩‍🎓 Student Records")
-
-        st.dataframe(
-            [
-                {
-                    "Name": s["name"],
-                    "Class": s["class_name"],
-                    "Account Email": s["email"],
-                    "Guardian Email": s["guardian_email"],
-                    "Registered": s["created_at"]
-                }
-                for s in students
-            ],
-            use_container_width=True,
-            hide_index=True
-        )
-
-        st.subheader("📈 Game Progress")
-
-        st.dataframe(
-            [
-                {
-                    "Student": s["name"],
-                    "Class": s["class_name"],
-                    "Game": s["game"],
-                    "Score": s["score"],
-                    "Played": s["played_at"]
-                }
-                for s in scores
-            ],
-            use_container_width=True,
-            hide_index=True
-        )
-
-        if students:
-
-            output = io.StringIO()
-
-            writer = csv.writer(output)
-
-            writer.writerow([
-                "Name", "Class", "Account Email",
-                "Guardian Email", "Registered"
-            ])
-
-            for s in students:
-                writer.writerow([
-                    s["name"],
-                    s["class_name"],
-                    s["email"],
-                    s["guardian_email"],
-                    s["created_at"]
-                ])
-
+            csv_text = "username,game,points\n"
+            csv_text += "\n".join(
+                f"{u},{g},{p}" for u,g,p in scores
+            )
             st.download_button(
-                "Download student CSV",
-                data=output.getvalue(),
-                file_name="little_minds_students.csv",
-                mime="text/csv"
+                "⬇️ Download Scores CSV",
+                csv_text,
+                "little_minds_scores.csv",
+                "text/csv"
             )
 
-
-# ==========================================
-# FOOTER
-# ==========================================
-
 st.divider()
-
-st.caption(
-    "🌈 Little Minds — Learn through play!"
-)
-
-st.caption(
-    "Starter prototype: records are stored in a local database. "
-    "Before public use with children, arrange a privacy and security "
-    "review, guardian-consent process, secure hosting and backups. "
-    "Never publish the local database file."
-)
+st.caption("🌈 Little Minds — Small steps, big discoveries!")
