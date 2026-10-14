@@ -4,14 +4,14 @@ import hashlib
 import hmac
 import os
 import random
+import html
 import csv
 import io
-import html
 from pathlib import Path
 
-# ==================================================
+# ==========================================
 # PAGE SETTINGS
-# ==================================================
+# ==========================================
 
 st.set_page_config(
     page_title="Little Minds",
@@ -22,9 +22,9 @@ st.set_page_config(
 DB = str(Path(__file__).resolve().parent / "little_minds.db")
 
 
-# ==================================================
+# ==========================================
 # DESIGN
-# ==================================================
+# ==========================================
 
 st.markdown("""
 <style>
@@ -60,10 +60,6 @@ div.stFormSubmitButton > button {
     border: 1px solid #d9e9ff;
     margin-bottom: 20px;
 }
-.hero h1 {
-    font-size: clamp(30px,4vw,46px);
-    margin: 0;
-}
 .tile {
     border-radius: 20px;
     padding: 18px 10px;
@@ -73,16 +69,15 @@ div.stFormSubmitButton > button {
 }
 .tile h2 {
     font-size: 34px;
-    margin: 0 0 5px;
 }
 .tile h3 {
     font-size: 17px;
     color: #293b6d;
 }
-.pink { background: #ffd8e9; }
-.green { background: #d8f8d0; }
-.yellow { background: #fff0bd; }
-.purple { background: #e8ddff; }
+.pink {background:#ffd8e9;}
+.green {background:#d8f8d0;}
+.yellow {background:#fff0bd;}
+.purple {background:#e8ddff;}
 .panel {
     background: white;
     border: 1px solid #dce8ff;
@@ -105,13 +100,13 @@ div[data-testid="stMetric"] {
 """, unsafe_allow_html=True)
 
 
-# ==================================================
+# ==========================================
 # DATABASE
-# ==================================================
+# ==========================================
 
 def connect():
     con = sqlite3.connect(DB, timeout=15)
-    con.execute("PRAGMA busy_timeout = 15000")
+    con.execute("PRAGMA busy_timeout=15000")
     return con
 
 
@@ -135,8 +130,8 @@ def setup_database():
             ).fetchall()
         }
 
-        # Missing columns add karo; table delete nahi hogi.
-        optional_columns = {
+        # Purane database mein missing columns add karo.
+        additions = {
             "name": "TEXT",
             "grade": "TEXT",
             "salt": "TEXT",
@@ -146,11 +141,11 @@ def setup_database():
             "created_at": "TEXT"
         }
 
-        for column, data_type in optional_columns.items():
+        for column, data_type in additions.items():
             if column not in columns:
                 con.execute(
-                    f"ALTER TABLE students ADD COLUMN "
-                    f"{column} {data_type}"
+                    "ALTER TABLE students ADD COLUMN "
+                    + column + " " + data_type
                 )
 
         con.execute("""
@@ -171,30 +166,21 @@ def setup_database():
         }
 
         if "created_at" not in score_columns:
-            con.execute("""
-                ALTER TABLE scores
-                ADD COLUMN created_at TEXT
-            """)
-
-        con.execute("""
-            CREATE INDEX IF NOT EXISTS idx_scores_username
-            ON scores(username)
-        """)
+            con.execute(
+                "ALTER TABLE scores ADD COLUMN created_at TEXT"
+            )
 
 
 try:
     setup_database()
-except sqlite3.Error:
-    st.error(
-        "Database setup nahi hua. Database ke columns "
-        "aur permissions check karne honge."
-    )
+except sqlite3.Error as error:
+    st.error("Database error: " + str(error))
     st.stop()
 
 
-# ==================================================
-# PASSWORD SECURITY
-# ==================================================
+# ==========================================
+# PASSWORD FUNCTIONS
+# ==========================================
 
 def make_hash(password, salt):
     return hashlib.pbkdf2_hmac(
@@ -203,19 +189,6 @@ def make_hash(password, salt):
         salt.encode("utf-8"),
         200000
     ).hex()
-
-
-# ==================================================
-# STUDENT FUNCTIONS
-# ==================================================
-
-def get_student(username):
-    with connect() as con:
-        return con.execute("""
-            SELECT username, name, grade
-            FROM students
-            WHERE username = ?
-        """, (username,)).fetchone()
 
 
 def register_student(username, name, grade, password):
@@ -247,17 +220,20 @@ def verify_login(username, password):
     if not row or not row[0] or not row[1]:
         return False
 
-    entered_hash = make_hash(password, row[0])
-
     return hmac.compare_digest(
-        entered_hash,
+        make_hash(password, row[0]),
         row[1]
     )
 
 
-# ==================================================
-# SCORE FUNCTIONS
-# ==================================================
+def get_student(username):
+    with connect() as con:
+        return con.execute("""
+            SELECT username, name, grade
+            FROM students
+            WHERE username = ?
+        """, (username,)).fetchone()
+
 
 def save_score(username, game):
     with connect() as con:
@@ -289,9 +265,9 @@ def get_total_points(username):
     return result[0]
 
 
-# ==================================================
+# ==========================================
 # SESSION STATE
-# ==================================================
+# ==========================================
 
 defaults = {
     "user": None,
@@ -312,9 +288,9 @@ def reset_game():
     st.session_state.answered = False
 
 
-# ==================================================
+# ==========================================
 # LOGIN AND REGISTRATION
-# ==================================================
+# ==========================================
 
 if not st.session_state.user:
 
@@ -354,7 +330,6 @@ if not st.session_state.user:
         if login:
             if not username or not password:
                 st.error("Username aur password enter karo.")
-
             else:
                 try:
                     if verify_login(username, password):
@@ -366,9 +341,7 @@ if not st.session_state.user:
                         st.error("Username ya password galat hai.")
 
                 except sqlite3.Error:
-                    st.error(
-                        "Login nahi hua. Database structure check karo."
-                    )
+                    st.error("Login nahi hua. Database check karo.")
 
     # REGISTRATION
     with register_tab:
@@ -415,9 +388,7 @@ if not st.session_state.user:
                 st.error("Student name enter karo.")
 
             elif len(new_user) < 3:
-                st.error(
-                    "Username kam se kam 3 characters ka hona chahiye."
-                )
+                st.error("Username kam se kam 3 characters ka rakho.")
 
             elif not all(
                 c.isalnum() or c in "_.-"
@@ -428,9 +399,7 @@ if not st.session_state.user:
                 )
 
             elif len(new_password) < 8:
-                st.error(
-                    "Password kam se kam 8 characters ka hona chahiye."
-                )
+                st.error("Password kam se kam 8 characters ka rakho.")
 
             elif new_password != confirm:
                 st.error("Passwords match nahi karte.")
@@ -452,14 +421,12 @@ if not st.session_state.user:
                     )
 
                 except sqlite3.IntegrityError:
-                    st.error(
-                        "Ye username pehle se use ho raha hai."
-                    )
+                    st.error("Ye username pehle se use ho raha hai.")
 
                 except sqlite3.Error:
                     st.error(
                         "Account create nahi hua. "
-                        "Purane database ke columns check karne honge."
+                        "Database configuration check karo."
                     )
 
     st.markdown(
@@ -468,9 +435,9 @@ if not st.session_state.user:
     )
 
 
-# ==================================================
+# ==========================================
 # LOGGED-IN WEBSITE
-# ==================================================
+# ==========================================
 
 else:
     student = get_student(st.session_state.user)
@@ -489,10 +456,10 @@ else:
         st.caption("Learn • Play • Grow")
 
         st.success(
-            f"Hello, {html.escape(student[1] or 'Learner')}!"
+            "Hello, " + html.escape(student[1] or "Learner") + "!"
         )
 
-        st.caption(f"Class: {student[2] or 'Not set'}")
+        st.caption("Class: " + (student[2] or "Not set"))
 
         page = st.radio(
             "Navigate",
@@ -524,21 +491,22 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-    # ==================================================
+    # ======================================
     # HOME
-    # ==================================================
+    # ======================================
 
     if page == "🏠 Home":
         safe_name = html.escape(student[1] or "Learner")
 
-        st.markdown(f"""
-        <div class="hero">
-            <div style="font-size:36px">🌈 🦋 ☀️</div>
-            <h1>Welcome back, {safe_name}!</h1>
-            <p>Your colourful learning adventure starts here.</p>
-            <div style="font-size:32px">🧒🏻 👧🏻 🎈</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            '<div class="hero">'
+            '<div style="font-size:36px">🌈 🦋 ☀️</div>'
+            '<h1>Welcome back, ' + safe_name + '!</h1>'
+            '<p>Your colourful learning adventure starts here.</p>'
+            '<div style="font-size:32px">🧒🏻 👧🏻 🎈</div>'
+            '</div>',
+            unsafe_allow_html=True
+        )
 
         cards = [
             ("🔤 ABC", "Alphabet Adventure", "Discover letters!", "pink"),
@@ -549,15 +517,18 @@ else:
 
         cols = st.columns(4)
 
-        for col, (icon, title, desc, colour) in zip(cols, cards):
+        for col, card in zip(cols, cards):
+            icon, title, desc, colour = card
+
             with col:
-                st.markdown(f"""
-                <div class="tile {colour}">
-                    <h2>{icon}</h2>
-                    <h3>{title}</h3>
-                    <p>{desc}</p>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(
+                    '<div class="tile ' + colour + '">'
+                    '<h2>' + icon + '</h2>'
+                    '<h3>' + title + '</h3>'
+                    '<p>' + desc + '</p>'
+                    '</div>',
+                    unsafe_allow_html=True
+                )
 
         left, right = st.columns(2)
 
@@ -583,9 +554,9 @@ else:
             </div>
             """, unsafe_allow_html=True)
 
-    # ==================================================
+    # ======================================
     # LEARNING GAMES
-    # ==================================================
+    # ======================================
 
     elif page == "🎮 Learning Games":
         st.markdown("""
@@ -612,14 +583,14 @@ else:
             or st.session_state.question.get("game") != game
         ):
             if game == "Colour Quest":
-                q = {
+                question_data = {
                     "prompt": "What colour is a ripe banana? 🍌",
                     "options": ["Blue", "Yellow", "Purple", "Green"],
                     "answer": "Yellow"
                 }
 
             elif game == "Shape Safari":
-                q = {
+                question_data = {
                     "prompt": "Which shape has three sides? 🔺",
                     "options": [
                         "Circle", "Triangle", "Square", "Rectangle"
@@ -628,7 +599,7 @@ else:
                 }
 
             elif game == "Alphabet Adventure":
-                q = {
+                question_data = {
                     "prompt": "Which letter comes after B?",
                     "options": ["A", "C", "D", "E"],
                     "answer": "C"
@@ -637,19 +608,19 @@ else:
             else:
                 number = random.randint(2, 8)
 
-                q = {
+                question_data = {
                     "prompt": (
-                        f"Count the flowers: "
-                        f"{' '.join(['🌼'] * number)}"
+                        "Count the flowers: "
+                        + " ".join(["🌼"] * number)
                     ),
                     "options": [str(n) for n in range(1, 10)],
                     "answer": str(number)
                 }
 
-            q["game"] = game
-            q["id"] = random.randint(100000, 999999)
+            question_data["game"] = game
+            question_data["id"] = random.randint(100000, 999999)
 
-            st.session_state.question = q
+            st.session_state.question = question_data
             st.session_state.feedback = None
             st.session_state.answered = False
 
@@ -666,7 +637,7 @@ else:
             "Choose your answer:",
             q["options"],
             horizontal=True,
-            key=f"answer_{q['id']}"
+            key="answer_" + str(q["id"])
         )
 
         if st.button(
@@ -679,10 +650,8 @@ else:
                 try:
                     save_score(st.session_state.user, game)
                     st.session_state.feedback = "correct"
-
                 except sqlite3.Error:
                     st.session_state.feedback = "database_error"
-
             else:
                 st.session_state.feedback = "try"
 
@@ -706,15 +675,13 @@ else:
                 st.rerun()
 
         elif st.session_state.feedback == "database_error":
-            st.error(
-                "Score save nahi hua. Database configuration check karo."
-            )
+            st.error("Score save nahi hua. Database check karo.")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # ==================================================
+    # ======================================
     # STUDENT DASHBOARD
-    # ==================================================
+    # ======================================
 
     elif page == "📊 My Dashboard":
         st.markdown("""
@@ -728,8 +695,11 @@ else:
         scores = get_scores(st.session_state.user)
         total = get_total_points(st.session_state.user)
 
-        st.subheader(f"👋 Hello, {student[1] or 'Learner'}!")
-        st.write(f"**Your class:** {student[2] or 'Not set'}")
+        st.subheader(
+            "👋 Hello, " + (student[1] or "Learner") + "!"
+        )
+
+        st.write("**Your class:** " + (student[2] or "Not set"))
 
         a, b = st.columns(2)
 
@@ -741,7 +711,34 @@ else:
         if scores:
             for game_name, points in scores:
                 st.markdown(
-                    f"""
-                    <div class="pill">
-                        <b>🎯 {html.escape(game_name)}</b>
-                        <span style="
+                    '<div class="pill"><b>🎯 '
+                    + html.escape(game_name)
+                    + '</b><span style="float:right;color:#7558db;'
+                    + 'font-weight:900">'
+                    + str(points)
+                    + ' points</span></div>',
+                    unsafe_allow_html=True
+                )
+        else:
+            st.info(
+                "Play your first game to start earning points!"
+            )
+
+    # ======================================
+    # ADMIN PANEL
+    # ======================================
+
+    elif page == "🛡️ Admin Panel":
+        st.markdown("""
+        <div class="hero">
+            <div style="font-size:35px">🛡️ 📋 ⭐</div>
+            <h1>Admin Panel</h1>
+            <p>Review student accounts and learning scores.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        admin_password = os.environ.get(
+            "LITTLE_MINDS_ADMIN_PASSWORD"
+        )
+
+        if not admin_pa
