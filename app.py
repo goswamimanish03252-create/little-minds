@@ -805,7 +805,11 @@ else:
                 reset_game()
                 st.rerun()
 
-        elif st.session_state.feedback == "try":
+       elif st.session_state.feedback == "try":
+    st.warning(
+        "Good try! Click Next Question to try another one."
+    )
 
-            st.warning(
-                "Good try! Click Next Questio
+    if st.button("Next Question ➜", key="next_after_wrong"):
+        reset_game()
+        st.rerun()
