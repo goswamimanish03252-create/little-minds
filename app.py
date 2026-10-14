@@ -31,16 +31,16 @@ h1 {
 }
 
 div.stButton > button {
+    background: #FFFFFF !important;
+    color: #26315F !important;
     border: 2px solid #D8DDFC !important;
     border-radius: 14px !important;
-    min-height: 55px;
+    min-height: 45px;
     font-weight: bold;
-    transition: 0.2s;
 }
 
 div.stButton > button:hover {
-    border-color: #26315F !important;
-    transform: scale(1.02);
+    background: #E7EAFE !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -95,7 +95,6 @@ def setup_question(game):
 
     elif game == "Counting":
         st.session_state.count_target = random.randint(1, 5)
-
         st.session_state.count_item = random.choice(
             ["🍎", "⭐", "🐻", "🍓", "🦋"]
         )
@@ -104,7 +103,6 @@ def setup_question(game):
         st.session_state.memory_cards = (
             ["🐶", "🐱", "🐸", "🦊"] * 2
         )
-
         random.shuffle(st.session_state.memory_cards)
 
         st.session_state.memory_revealed = []
@@ -134,9 +132,7 @@ def answer(correct, game):
         st.session_state.scores[game] += 1
         st.session_state.feedback = "🎉 Correct! Well done!"
     else:
-        st.session_state.feedback = (
-            "😊 Good try! Try again!"
-        )
+        st.session_state.feedback = "😊 Good try! Try again!"
 
     st.session_state.answered = True
 
@@ -166,67 +162,39 @@ if st.session_state.page == "Home":
     with left:
         st.markdown("### 🎨 Colours")
 
-        if st.button(
-            "🎨 Play Colours",
-            use_container_width=True
-        ):
+        if st.button("Play Colours", use_container_width=True):
             start_game("Colours")
             st.rerun()
 
         st.markdown("### 🔢 Counting")
 
-        if st.button(
-            "🔢 Play Counting",
-            use_container_width=True
-        ):
+        if st.button("Play Counting", use_container_width=True):
             start_game("Counting")
             st.rerun()
 
     with right:
         st.markdown("### 🔺 Shapes")
 
-        if st.button(
-            "🔺 Play Shapes",
-            use_container_width=True
-        ):
+        if st.button("Play Shapes", use_container_width=True):
             start_game("Shapes")
             st.rerun()
 
         st.markdown("### 🧠 Memory")
 
-        if st.button(
-            "🧠 Play Memory",
-            use_container_width=True
-        ):
+        if st.button("Play Memory", use_container_width=True):
             start_game("Memory")
             st.rerun()
 
     st.divider()
-
     st.subheader("⭐ Your Practice Points")
 
     a, b = st.columns(2)
     c, d = st.columns(2)
 
-    a.metric(
-        "🎨 Colours",
-        st.session_state.scores["Colours"]
-    )
-
-    b.metric(
-        "🔺 Shapes",
-        st.session_state.scores["Shapes"]
-    )
-
-    c.metric(
-        "🔢 Counting",
-        st.session_state.scores["Counting"]
-    )
-
-    d.metric(
-        "🧠 Memory",
-        st.session_state.scores["Memory"]
-    )
+    a.metric("🎨 Colours", st.session_state.scores["Colours"])
+    b.metric("🔺 Shapes", st.session_state.scores["Shapes"])
+    c.metric("🔢 Counting", st.session_state.scores["Counting"])
+    d.metric("🧠 Memory", st.session_state.scores["Memory"])
 
 
 # ================= COLOUR MATCHING =================
@@ -234,13 +202,12 @@ if st.session_state.page == "Home":
 elif st.session_state.page == "Colours":
 
     home_button()
-
     st.header("🎨 Colour Matching")
 
     target = st.session_state.target
 
-    # Colour name target mein nahi dikhaya jayega.
-    st.write("Find the correct colour!")
+    # Upar target colour ka naam dikhai dega.
+    st.subheader(f"Find the {target} colour!")
 
     st.write(
         f"Points: {st.session_state.scores['Colours']}"
@@ -249,51 +216,55 @@ elif st.session_state.page == "Colours":
     options = list(COLOURS)
     random.shuffle(options)
 
-    # Har colour ka apna clickable coloured button.
     cols = st.columns(2)
 
     for i, colour in enumerate(options):
 
         with cols[i % 2]:
 
-            # Har button ka background uske colour se match karega.
+            # CSS se har option ko coloured box banaya gaya hai.
             st.markdown(
                 f"""
                 <style>
                 div.st-key-colour_{colour} button {{
                     background-color: {COLOURS[colour]} !important;
-                    color: {"#26315F" if colour == "YELLOW" else "#FFFFFF"} !important;
+                    color: transparent !important;
                     min-height: 110px !important;
+                    height: 110px !important;
                     border-radius: 18px !important;
-                    border: 3px solid #FFFFFF !important;
-                    font-size: 19px !important;
-                    font-weight: bold !important;
+                    border: 3px solid white !important;
+                    padding: 0 !important;
+                }}
+
+                div.st-key-colour_{colour} button p {{
+                    visibility: hidden !important;
+                }}
+
+                div.st-key-colour_{colour} button:hover {{
+                    filter: brightness(0.92);
+                    border: 3px solid #26315F !important;
                 }}
                 </style>
                 """,
                 unsafe_allow_html=True
             )
 
-            # Button ke andar hi CHOOSE aur colour ka naam.
+            # Sirf coloured box clickable hai; colour ka naam nahi hai.
             if st.button(
-                f"CHOOSE {colour}",
+                " ",
                 key=f"colour_{colour}",
                 use_container_width=True,
                 disabled=st.session_state.answered
             ):
-                answer(
-                    colour == target,
-                    "Colours"
-                )
+                answer(colour == target, "Colours")
                 st.rerun()
 
     if st.session_state.feedback:
 
-        if st.session_state.answered:
-            if st.session_state.feedback.startswith("🎉"):
-                st.success(st.session_state.feedback)
-            else:
-                st.warning(st.session_state.feedback)
+        if st.session_state.feedback.startswith("🎉"):
+            st.success(st.session_state.feedback)
+        else:
+            st.warning(st.session_state.feedback)
 
     if st.session_state.answered:
 
@@ -310,13 +281,11 @@ elif st.session_state.page == "Colours":
 elif st.session_state.page == "Shapes":
 
     home_button()
-
     st.header("🔺 Shape Matching")
 
     target = st.session_state.shape_target
 
-    st.write("Find the correct shape!")
-
+    st.write(f"Find the {target} shape!")
     st.markdown(f"# {SHAPES[target]}")
 
     cols = st.columns(2)
@@ -326,23 +295,20 @@ elif st.session_state.page == "Shapes":
         with cols[i % 2]:
 
             if st.button(
-                f"{SHAPES[shape]}  {shape}",
+                f"{SHAPES[shape]} {shape}",
                 key=f"shape_{shape}",
                 use_container_width=True,
                 disabled=st.session_state.answered
             ):
-                answer(
-                    shape == target,
-                    "Shapes"
-                )
+                answer(shape == target, "Shapes")
                 st.rerun()
 
     if st.session_state.feedback:
-        if st.session_state.answered:
-            if st.session_state.feedback.startswith("🎉"):
-                st.success(st.session_state.feedback)
-            else:
-                st.warning(st.session_state.feedback)
+
+        if st.session_state.feedback.startswith("🎉"):
+            st.success(st.session_state.feedback)
+        else:
+            st.warning(st.session_state.feedback)
 
     if st.session_state.answered:
 
@@ -359,7 +325,6 @@ elif st.session_state.page == "Shapes":
 elif st.session_state.page == "Counting":
 
     home_button()
-
     st.header("🔢 Counting Fun")
 
     target = st.session_state.count_target
@@ -396,18 +361,15 @@ elif st.session_state.page == "Counting":
                 use_container_width=True,
                 disabled=st.session_state.answered
             ):
-                answer(
-                    number == target,
-                    "Counting"
-                )
+                answer(number == target, "Counting")
                 st.rerun()
 
     if st.session_state.feedback:
-        if st.session_state.answered:
-            if st.session_state.feedback.startswith("🎉"):
-                st.success(st.session_state.feedback)
-            else:
-                st.warning(st.session_state.feedback)
+
+        if st.session_state.feedback.startswith("🎉"):
+            st.success(st.session_state.feedback)
+        else:
+            st.warning(st.session_state.feedback)
 
     if st.session_state.answered:
 
@@ -424,7 +386,6 @@ elif st.session_state.page == "Counting":
 elif st.session_state.page == "Memory":
 
     home_button()
-
     st.header("🧠 Memory Match")
 
     st.write("Find two matching animal cards!")
@@ -435,9 +396,7 @@ elif st.session_state.page == "Memory":
 
     if len(matched) == len(cards):
 
-        st.success(
-            "🏆 Amazing! You found all the pairs!"
-        )
+        st.success("🏆 Amazing! You found all the pairs!")
 
         if st.button(
             "🔄 Play Again",
