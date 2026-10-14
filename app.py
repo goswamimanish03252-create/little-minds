@@ -1,744 +1,527 @@
-import streamlit as st
-import sqlite3
-import hashlib
-import hmac
-import os
 import random
-import html
-import csv
-import io
-from pathlib import Path
-
-# ==========================================
-# PAGE SETTINGS
-# ==========================================
+import streamlit as st
 
 st.set_page_config(
     page_title="Little Minds",
     page_icon="🌈",
-    layout="wide"
+    layout="centered"
 )
 
-DB = str(Path(__file__).resolve().parent / "little_minds.db")
-
-
-# ==========================================
-# DESIGN
-# ==========================================
+# ================= CSS DESIGN =================
 
 st.markdown("""
 <style>
-.stApp {
-    background: linear-gradient(135deg,#f4f8ff,#fff8fb,#fffdf3);
-    color: #25365f;
+.stApp,
+[data-testid="stAppViewContainer"] {
+    background: #F3F5FF !important;
+    color: #26315F !important;
 }
-[data-testid="stSidebar"] {
-    background: #eef2ff;
+
+.stApp h1,
+.stApp h2,
+.stApp h3,
+.stApp p,
+.stApp label,
+.stApp [data-testid="stMarkdownContainer"] {
+    color: #26315F !important;
 }
-.block-container {
-    max-width: 1350px;
-    padding-top: 1.3rem;
-}
-h1, h2, h3 {
-    color: #493b91;
-    font-weight: 900;
-}
-div.stButton > button,
-div.stFormSubmitButton > button {
-    background: #7658ed;
-    color: white;
-    border: 0;
-    border-radius: 13px;
-    min-height: 42px;
-    font-weight: 800;
-}
-.hero {
-    background: linear-gradient(110deg,#d7f2ff,#f1e5ff,#ffe4ef);
-    border-radius: 24px;
-    padding: 25px;
+
+h1 {
     text-align: center;
-    border: 1px solid #d9e9ff;
-    margin-bottom: 20px;
 }
-.tile {
-    border-radius: 20px;
-    padding: 18px 10px;
-    min-height: 150px;
-    text-align: center;
-    margin-bottom: 12px;
+
+div.stButton > button {
+    border: 2px solid #D8DDFC !important;
+    border-radius: 14px !important;
+    min-height: 55px;
+    font-weight: bold;
+    transition: 0.2s;
 }
-.tile h2 {
-    font-size: 34px;
-}
-.tile h3 {
-    font-size: 17px;
-    color: #293b6d;
-}
-.pink {background:#ffd8e9;}
-.green {background:#d8f8d0;}
-.yellow {background:#fff0bd;}
-.purple {background:#e8ddff;}
-.panel {
-    background: white;
-    border: 1px solid #dce8ff;
-    border-radius: 18px;
-    padding: 20px;
-}
-.pill {
-    background: #eef4ff;
-    border-radius: 13px;
-    padding: 13px 15px;
-    margin: 7px 0;
-}
-div[data-testid="stMetric"] {
-    background: white;
-    border: 1px solid #dce8ff;
-    border-radius: 16px;
-    padding: 14px;
+
+div.stButton > button:hover {
+    border-color: #26315F !important;
+    transform: scale(1.02);
 }
 </style>
 """, unsafe_allow_html=True)
 
 
-# ==========================================
-# DATABASE
-# ==========================================
+# ================= GAME DATA =================
 
-def connect():
-    con = sqlite3.connect(DB, timeout=15)
-    con.execute("PRAGMA busy_timeout=15000")
-    return con
+COLOURS = {
+    "RED": "#F04444",
+    "BLUE": "#4285F4",
+    "GREEN": "#36A66A",
+    "YELLOW": "#F5C542"
+}
 
-
-def setup_database():
-    with connect() as con:
-        con.execute("""
-            CREATE TABLE IF NOT EXISTS students (
-                username TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                grade TEXT NOT NULL,
-                salt TEXT NOT NULL,
-                password_hash TEXT NOT NULL
-            )
-        """)
-
-        # Existing database ke columns check karo.
-        columns = {
-            row[1]
-            for row in con.execute(
-                "PRAGMA table_info(students)"
-            ).fetchall()
-        }
-
-        # Purane database mein missing columns add karo.
-        additions = {
-            "name": "TEXT",
-            "grade": "TEXT",
-            "salt": "TEXT",
-            "password_hash": "TEXT",
-            "email": "TEXT",
-            "guardian_email": "TEXT",
-            "created_at": "TEXT"
-        }
-
-        for column, data_type in additions.items():
-            if column not in columns:
-                con.execute(
-                    "ALTER TABLE students ADD COLUMN "
-                    + column + " " + data_type
-                )
-
-        con.execute("""
-            CREATE TABLE IF NOT EXISTS scores (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL,
-                game TEXT NOT NULL,
-                points INTEGER DEFAULT 1,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        score_columns = {
-            row[1]
-            for row in con.execute(
-                "PRAGMA table_info(scores)"
-            ).fetchall()
-        }
-
-        if "created_at" not in score_columns:
-            con.execute(
-                "ALTER TABLE scores ADD COLUMN created_at TEXT"
-            )
+SHAPES = {
+    "CIRCLE": "🔵",
+    "SQUARE": "🟦",
+    "TRIANGLE": "🔺",
+    "STAR": "⭐"
+}
 
 
-try:
-    setup_database()
-except sqlite3.Error as error:
-    st.error("Database error: " + str(error))
-    st.stop()
+# ================= SESSION STATE =================
+
+if "page" not in st.session_state:
+    st.session_state.page = "Home"
+
+if "scores" not in st.session_state:
+    st.session_state.scores = {
+        "Colours": 0,
+        "Shapes": 0,
+        "Counting": 0,
+        "Memory": 0
+    }
 
 
-# ==========================================
-# PASSWORD FUNCTIONS
-# ==========================================
+# ================= QUESTION SETUP =================
 
-def make_hash(password, salt):
-    return hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        salt.encode("utf-8"),
-        200000
-    ).hex()
+def setup_question(game):
+    st.session_state.answered = False
+    st.session_state.feedback = ""
+
+    if game == "Colours":
+        st.session_state.target = random.choice(
+            list(COLOURS)
+        )
+
+    elif game == "Shapes":
+        st.session_state.shape_target = random.choice(
+            list(SHAPES)
+        )
+
+    elif game == "Counting":
+        st.session_state.count_target = random.randint(1, 5)
+
+        st.session_state.count_item = random.choice(
+            ["🍎", "⭐", "🐻", "🍓", "🦋"]
+        )
+
+    elif game == "Memory":
+        st.session_state.memory_cards = (
+            ["🐶", "🐱", "🐸", "🦊"] * 2
+        )
+
+        random.shuffle(st.session_state.memory_cards)
+
+        st.session_state.memory_revealed = []
+        st.session_state.memory_matched = []
+        st.session_state.memory_moves = 0
+        st.session_state.memory_feedback = ""
 
 
-def register_student(username, name, grade, password):
-    salt = os.urandom(16).hex()
-    password_hash = make_hash(password, salt)
-
-    with connect() as con:
-        con.execute("""
-            INSERT INTO students
-            (username, name, grade, salt, password_hash)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            username,
-            name,
-            grade,
-            salt,
-            password_hash
-        ))
+def start_game(game):
+    st.session_state.page = game
+    setup_question(game)
 
 
-def verify_login(username, password):
-    with connect() as con:
-        row = con.execute("""
-            SELECT salt, password_hash
-            FROM students
-            WHERE username = ?
-        """, (username,)).fetchone()
+def go_home():
+    st.session_state.page = "Home"
 
-    if not row or not row[0] or not row[1]:
-        return False
 
-    return hmac.compare_digest(
-        make_hash(password, row[0]),
-        row[1]
+def next_question(game):
+    setup_question(game)
+
+
+def answer(correct, game):
+    if st.session_state.answered:
+        return
+
+    if correct:
+        st.session_state.scores[game] += 1
+        st.session_state.feedback = "🎉 Correct! Well done!"
+    else:
+        st.session_state.feedback = (
+            "😊 Good try! Try again!"
+        )
+
+    st.session_state.answered = True
+
+
+def home_button():
+    if st.button("🏠 Back to Home"):
+        go_home()
+        st.rerun()
+
+
+# ================= HOME PAGE =================
+
+st.title("🌈 LITTLE MINDS")
+
+st.markdown(
+    "<p style='text-align:center'>Play • Learn • Grow</p>",
+    unsafe_allow_html=True
+)
+
+if st.session_state.page == "Home":
+
+    st.subheader("Welcome, Little Explorer! ⭐")
+    st.write("Choose any game you want to play!")
+
+    left, right = st.columns(2)
+
+    with left:
+        st.markdown("### 🎨 Colours")
+
+        if st.button(
+            "🎨 Play Colours",
+            use_container_width=True
+        ):
+            start_game("Colours")
+            st.rerun()
+
+        st.markdown("### 🔢 Counting")
+
+        if st.button(
+            "🔢 Play Counting",
+            use_container_width=True
+        ):
+            start_game("Counting")
+            st.rerun()
+
+    with right:
+        st.markdown("### 🔺 Shapes")
+
+        if st.button(
+            "🔺 Play Shapes",
+            use_container_width=True
+        ):
+            start_game("Shapes")
+            st.rerun()
+
+        st.markdown("### 🧠 Memory")
+
+        if st.button(
+            "🧠 Play Memory",
+            use_container_width=True
+        ):
+            start_game("Memory")
+            st.rerun()
+
+    st.divider()
+
+    st.subheader("⭐ Your Practice Points")
+
+    a, b = st.columns(2)
+    c, d = st.columns(2)
+
+    a.metric(
+        "🎨 Colours",
+        st.session_state.scores["Colours"]
+    )
+
+    b.metric(
+        "🔺 Shapes",
+        st.session_state.scores["Shapes"]
+    )
+
+    c.metric(
+        "🔢 Counting",
+        st.session_state.scores["Counting"]
+    )
+
+    d.metric(
+        "🧠 Memory",
+        st.session_state.scores["Memory"]
     )
 
 
-def get_student(username):
-    with connect() as con:
-        return con.execute("""
-            SELECT username, name, grade
-            FROM students
-            WHERE username = ?
-        """, (username,)).fetchone()
+# ================= COLOUR MATCHING =================
 
+elif st.session_state.page == "Colours":
 
-def save_score(username, game):
-    with connect() as con:
-        con.execute("""
-            INSERT INTO scores (username, game, points)
-            VALUES (?, ?, 1)
-        """, (username, game))
+    home_button()
 
+    st.header("🎨 Colour Matching")
 
-def get_scores(username):
-    with connect() as con:
-        return con.execute("""
-            SELECT game, SUM(points)
-            FROM scores
-            WHERE username = ?
-            GROUP BY game
-            ORDER BY game
-        """, (username,)).fetchall()
+    target = st.session_state.target
 
+    # Colour name target mein nahi dikhaya jayega.
+    st.write("Find the correct colour!")
 
-def get_total_points(username):
-    with connect() as con:
-        result = con.execute("""
-            SELECT COALESCE(SUM(points), 0)
-            FROM scores
-            WHERE username = ?
-        """, (username,)).fetchone()
+    st.write(
+        f"Points: {st.session_state.scores['Colours']}"
+    )
 
-    return result[0]
+    options = list(COLOURS)
+    random.shuffle(options)
 
+    # Har colour ka apna clickable coloured button.
+    cols = st.columns(2)
 
-# ==========================================
-# SESSION STATE
-# ==========================================
+    for i, colour in enumerate(options):
 
-defaults = {
-    "user": None,
-    "question": None,
-    "feedback": None,
-    "answered": False,
-    "admin_ok": False
-}
+        with cols[i % 2]:
 
-for key, value in defaults.items():
-    if key not in st.session_state:
-        st.session_state[key] = value
-
-
-def reset_game():
-    st.session_state.question = None
-    st.session_state.feedback = None
-    st.session_state.answered = False
-
-
-# ==========================================
-# LOGIN AND REGISTRATION
-# ==========================================
-
-if not st.session_state.user:
-
-    st.markdown("""
-    <div class="hero">
-        <div style="font-size:38px">🌈 🦋 🎈</div>
-        <h1>Welcome to Little Minds!</h1>
-        <p>A happy place to learn, play and grow.</p>
-        <div style="font-size:34px">🧒🏻 👧🏻 ⭐</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    login_tab, register_tab = st.tabs([
-        "🔐 Login",
-        "✨ Create Account"
-    ])
-
-    # LOGIN
-    with login_tab:
-        st.subheader("Welcome Back!")
-
-        with st.form("login_form"):
-            username = st.text_input(
-                "Username"
-            ).strip().lower()
-
-            password = st.text_input(
-                "Password",
-                type="password"
+            # Har button ka background uske colour se match karega.
+            st.markdown(
+                f"""
+                <style>
+                div.st-key-colour_{colour} button {{
+                    background-color: {COLOURS[colour]} !important;
+                    color: {"#26315F" if colour == "YELLOW" else "#FFFFFF"} !important;
+                    min-height: 110px !important;
+                    border-radius: 18px !important;
+                    border: 3px solid #FFFFFF !important;
+                    font-size: 19px !important;
+                    font-weight: bold !important;
+                }}
+                </style>
+                """,
+                unsafe_allow_html=True
             )
 
-            login = st.form_submit_button(
-                "Login 🚀",
-                use_container_width=True
-            )
-
-        if login:
-            if not username or not password:
-                st.error("Username aur password enter karo.")
-            else:
-                try:
-                    if verify_login(username, password):
-                        st.session_state.user = username
-                        st.session_state.admin_ok = False
-                        reset_game()
-                        st.rerun()
-                    else:
-                        st.error("Username ya password galat hai.")
-
-                except sqlite3.Error:
-                    st.error("Login nahi hua. Database check karo.")
-
-    # REGISTRATION
-    with register_tab:
-        st.subheader("Create Your Account 🌟")
-
-        st.info(
-            "Bachchon ke account ke liye parent/guardian "
-            "ki permission zaroori hai."
-        )
-
-        with st.form("register_form"):
-            name = st.text_input("Student name")
-
-            new_user = st.text_input(
-                "Choose username"
-            ).strip().lower()
-
-            grade = st.selectbox(
-                "Choose class",
-                ["Play Group", "Nursery", "LKG", "UKG"]
-            )
-
-            new_password = st.text_input(
-                "Create password (8+ characters)",
-                type="password"
-            )
-
-            confirm = st.text_input(
-                "Confirm password",
-                type="password"
-            )
-
-            guardian = st.checkbox(
-                "My parent/guardian has approved this account."
-            )
-
-            create = st.form_submit_button(
-                "Create Account 🌈",
-                use_container_width=True
-            )
-
-        if create:
-            if not name.strip():
-                st.error("Student name enter karo.")
-
-            elif len(new_user) < 3:
-                st.error("Username kam se kam 3 characters ka rakho.")
-
-            elif not all(
-                c.isalnum() or c in "_.-"
-                for c in new_user
+            # Button ke andar hi CHOOSE aur colour ka naam.
+            if st.button(
+                f"CHOOSE {colour}",
+                key=f"colour_{colour}",
+                use_container_width=True,
+                disabled=st.session_state.answered
             ):
-                st.error(
-                    "Username mein letters, numbers, _, - ya . use karo."
+                answer(
+                    colour == target,
+                    "Colours"
                 )
+                st.rerun()
 
-            elif len(new_password) < 8:
-                st.error("Password kam se kam 8 characters ka rakho.")
+    if st.session_state.feedback:
 
-            elif new_password != confirm:
-                st.error("Passwords match nahi karte.")
-
-            elif not guardian:
-                st.warning("Parent/guardian se permission lo.")
-
+        if st.session_state.answered:
+            if st.session_state.feedback.startswith("🎉"):
+                st.success(st.session_state.feedback)
             else:
-                try:
-                    register_student(
-                        new_user,
-                        name.strip(),
-                        grade,
-                        new_password
-                    )
+                st.warning(st.session_state.feedback)
 
-                    st.success(
-                        "Account ban gaya! Ab Login tab se sign in karo."
-                    )
+    if st.session_state.answered:
 
-                except sqlite3.IntegrityError:
-                    st.error("Ye username pehle se use ho raha hai.")
+        if st.button(
+            "➡️ Next Question",
+            use_container_width=True
+        ):
+            next_question("Colours")
+            st.rerun()
 
-                except sqlite3.Error:
-                    st.error(
-                        "Account create nahi hua. "
-                        "Database configuration check karo."
-                    )
+
+# ================= SHAPES =================
+
+elif st.session_state.page == "Shapes":
+
+    home_button()
+
+    st.header("🔺 Shape Matching")
+
+    target = st.session_state.shape_target
+
+    st.write("Find the correct shape!")
+
+    st.markdown(f"# {SHAPES[target]}")
+
+    cols = st.columns(2)
+
+    for i, shape in enumerate(SHAPES):
+
+        with cols[i % 2]:
+
+            if st.button(
+                f"{SHAPES[shape]}  {shape}",
+                key=f"shape_{shape}",
+                use_container_width=True,
+                disabled=st.session_state.answered
+            ):
+                answer(
+                    shape == target,
+                    "Shapes"
+                )
+                st.rerun()
+
+    if st.session_state.feedback:
+        if st.session_state.answered:
+            if st.session_state.feedback.startswith("🎉"):
+                st.success(st.session_state.feedback)
+            else:
+                st.warning(st.session_state.feedback)
+
+    if st.session_state.answered:
+
+        if st.button(
+            "➡️ Next Shape",
+            use_container_width=True
+        ):
+            next_question("Shapes")
+            st.rerun()
+
+
+# ================= COUNTING =================
+
+elif st.session_state.page == "Counting":
+
+    home_button()
+
+    st.header("🔢 Counting Fun")
+
+    target = st.session_state.count_target
+    item = st.session_state.count_item
+
+    st.write("Count the objects!")
 
     st.markdown(
-        "<center>💜 Little Minds • Learn • Play • Grow</center>",
+        f"""
+        <div style="
+            font-size:42px;
+            text-align:center;
+            background:white;
+            border-radius:18px;
+            padding:20px;
+        ">
+            {" ".join([item] * target)}
+        </div>
+        """,
         unsafe_allow_html=True
     )
 
+    st.write("How many objects are there?")
 
-# ==========================================
-# LOGGED-IN WEBSITE
-# ==========================================
+    cols = st.columns(5)
 
-else:
-    student = get_student(st.session_state.user)
+    for number in range(1, 6):
 
-    if student is None:
-        st.session_state.user = None
-        st.session_state.admin_ok = False
-        st.rerun()
+        with cols[number - 1]:
 
-    with st.sidebar:
-        st.markdown(
-            "<h1 style='text-align:center'>🎓 Little Minds</h1>",
-            unsafe_allow_html=True
-        )
+            if st.button(
+                str(number),
+                key=f"number_{number}",
+                use_container_width=True,
+                disabled=st.session_state.answered
+            ):
+                answer(
+                    number == target,
+                    "Counting"
+                )
+                st.rerun()
 
-        st.caption("Learn • Play • Grow")
+    if st.session_state.feedback:
+        if st.session_state.answered:
+            if st.session_state.feedback.startswith("🎉"):
+                st.success(st.session_state.feedback)
+            else:
+                st.warning(st.session_state.feedback)
 
-        st.success(
-            "Hello, " + html.escape(student[1] or "Learner") + "!"
-        )
+    if st.session_state.answered:
 
-        st.caption("Class: " + (student[2] or "Not set"))
-
-        page = st.radio(
-            "Navigate",
-            [
-                "🏠 Home",
-                "🎮 Learning Games",
-                "📊 My Dashboard",
-                "🛡️ Admin Panel"
-            ]
-        )
-
-        st.divider()
-
-        if st.button("Log out", use_container_width=True):
-            st.session_state.user = None
-            st.session_state.admin_ok = False
-            reset_game()
+        if st.button(
+            "➡️ Next Question",
+            use_container_width=True
+        ):
+            next_question("Counting")
             st.rerun()
 
-        st.markdown("""
-        <div style="
-            background:#e5edff;
-            padding:16px;
-            border-radius:15px;
-            text-align:center">
-            ⭐ 🌈 ⭐<br>
-            <b>Small steps today,<br>
-            big dreams tomorrow!</b>
-        </div>
-        """, unsafe_allow_html=True)
 
-    # ======================================
-    # HOME
-    # ======================================
+# ================= MEMORY MATCH =================
 
-    if page == "🏠 Home":
-        safe_name = html.escape(student[1] or "Learner")
+elif st.session_state.page == "Memory":
 
-        st.markdown(
-            '<div class="hero">'
-            '<div style="font-size:36px">🌈 🦋 ☀️</div>'
-            '<h1>Welcome back, ' + safe_name + '!</h1>'
-            '<p>Your colourful learning adventure starts here.</p>'
-            '<div style="font-size:32px">🧒🏻 👧🏻 🎈</div>'
-            '</div>',
-            unsafe_allow_html=True
-        )
+    home_button()
 
-        cards = [
-            ("🔤 ABC", "Alphabet Adventure", "Discover letters!", "pink"),
-            ("🔢 123", "Counting Garden", "Count and grow!", "green"),
-            ("🔴 🔺", "Shapes & Colours", "Explore the world!", "yellow"),
-            ("🧠 ⭐", "Memory Match", "Train your memory!", "purple")
-        ]
+    st.header("🧠 Memory Match")
 
-        cols = st.columns(4)
+    st.write("Find two matching animal cards!")
 
-        for col, card in zip(cols, cards):
-            icon, title, desc, colour = card
+    cards = st.session_state.memory_cards
+    revealed = st.session_state.memory_revealed
+    matched = st.session_state.memory_matched
 
-            with col:
-                st.markdown(
-                    '<div class="tile ' + colour + '">'
-                    '<h2>' + icon + '</h2>'
-                    '<h3>' + title + '</h3>'
-                    '<p>' + desc + '</p>'
-                    '</div>',
-                    unsafe_allow_html=True
-                )
+    if len(matched) == len(cards):
 
-        left, right = st.columns(2)
-
-        with left:
-            st.markdown("""
-            <div class="panel">
-                <h3>🚀 Quick Start</h3>
-                🟢 Choose a learning game<br><br>
-                🔵 Answer fun questions<br><br>
-                🟣 Earn points<br><br>
-                🟠 Track your progress
-            </div>
-            """, unsafe_allow_html=True)
-
-        with right:
-            st.markdown("""
-            <div class="panel">
-                <h3>🏆 Learning Highlights</h3>
-                ✅ Colourful learning activities<br><br>
-                ✅ Personal progress dashboard<br><br>
-                ✅ Fun questions for little learners<br><br>
-                ✅ Celebrate every correct answer!
-            </div>
-            """, unsafe_allow_html=True)
-
-    # ======================================
-    # LEARNING GAMES
-    # ======================================
-
-    elif page == "🎮 Learning Games":
-        st.markdown("""
-        <div class="hero">
-            <div style="font-size:36px">🎮 🌟 🎨</div>
-            <h1>Learning Adventures</h1>
-            <p>Every question is a new little victory!</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        game = st.selectbox(
-            "Choose your adventure",
-            [
-                "Colour Quest",
-                "Shape Safari",
-                "Counting Garden",
-                "Alphabet Adventure"
-            ],
-            key="selected_game"
-        )
-
-        if (
-            st.session_state.question is None
-            or st.session_state.question.get("game") != game
-        ):
-            if game == "Colour Quest":
-                question_data = {
-                    "prompt": "What colour is a ripe banana? 🍌",
-                    "options": ["Blue", "Yellow", "Purple", "Green"],
-                    "answer": "Yellow"
-                }
-
-            elif game == "Shape Safari":
-                question_data = {
-                    "prompt": "Which shape has three sides? 🔺",
-                    "options": [
-                        "Circle", "Triangle", "Square", "Rectangle"
-                    ],
-                    "answer": "Triangle"
-                }
-
-            elif game == "Alphabet Adventure":
-                question_data = {
-                    "prompt": "Which letter comes after B?",
-                    "options": ["A", "C", "D", "E"],
-                    "answer": "C"
-                }
-
-            else:
-                number = random.randint(2, 8)
-
-                question_data = {
-                    "prompt": (
-                        "Count the flowers: "
-                        + " ".join(["🌼"] * number)
-                    ),
-                    "options": [str(n) for n in range(1, 10)],
-                    "answer": str(number)
-                }
-
-            question_data["game"] = game
-            question_data["id"] = random.randint(100000, 999999)
-
-            st.session_state.question = question_data
-            st.session_state.feedback = None
-            st.session_state.answered = False
-
-        q = st.session_state.question
-
-        st.markdown(
-            '<div class="panel">',
-            unsafe_allow_html=True
-        )
-
-        st.subheader(q["prompt"])
-
-        answer = st.radio(
-            "Choose your answer:",
-            q["options"],
-            horizontal=True,
-            key="answer_" + str(q["id"])
+        st.success(
+            "🏆 Amazing! You found all the pairs!"
         )
 
         if st.button(
-            "Check Answer ⭐",
-            disabled=st.session_state.answered
+            "🔄 Play Again",
+            use_container_width=True
         ):
-            st.session_state.answered = True
-
-            if answer == q["answer"]:
-                try:
-                    save_score(st.session_state.user, game)
-                    st.session_state.feedback = "correct"
-                except sqlite3.Error:
-                    st.session_state.feedback = "database_error"
-            else:
-                st.session_state.feedback = "try"
-
+            next_question("Memory")
             st.rerun()
 
-        if st.session_state.feedback == "correct":
-            st.success("Correct! Amazing job! 🎉")
+    else:
 
-            if st.button("Next Question ➜"):
-                reset_game()
-                st.rerun()
+        cols = st.columns(4)
 
-        elif st.session_state.feedback == "try":
-            st.warning("Good try! Have another go.")
+        for i, card in enumerate(cards):
 
-            if st.button(
-                "Next Question ➜",
-                key="next_after_wrong"
-            ):
-                reset_game()
-                st.rerun()
+            with cols[i % 4]:
 
-        elif st.session_state.feedback == "database_error":
-            st.error("Score save nahi hua. Database check karo.")
+                if i in matched or i in revealed:
+                    label = card
+                else:
+                    label = "❔"
 
-        st.markdown("</div>", unsafe_allow_html=True)
+                if st.button(
+                    label,
+                    key=f"memory_{i}",
+                    use_container_width=True,
+                    disabled=(i in matched)
+                ):
 
-    # ======================================
-    # STUDENT DASHBOARD
-    # ======================================
+                    if i not in matched and i not in revealed:
 
-    elif page == "📊 My Dashboard":
-        st.markdown("""
-        <div class="hero">
-            <div style="font-size:35px">📊 ⭐ 🏆</div>
-            <h1>My Learning Dashboard</h1>
-            <p>Look how much you have learned!</p>
-        </div>
-        """, unsafe_allow_html=True)
+                        if len(revealed) == 2:
+                            revealed.clear()
 
-        scores = get_scores(st.session_state.user)
-        total = get_total_points(st.session_state.user)
+                        revealed.append(i)
 
-        st.subheader(
-            "👋 Hello, " + (student[1] or "Learner") + "!"
+                        if len(revealed) == 2:
+
+                            first, second = revealed
+
+                            st.session_state.memory_moves += 1
+
+                            if cards[first] == cards[second]:
+
+                                matched.extend(revealed)
+                                revealed.clear()
+
+                                st.session_state.scores["Memory"] += 1
+
+                                st.session_state.memory_feedback = (
+                                    "🎉 Match found!"
+                                )
+
+                            else:
+
+                                st.session_state.memory_feedback = (
+                                    "Keep looking! Select another card."
+                                )
+
+                    st.rerun()
+
+        st.write(
+            f"Pairs found: {len(matched) // 2} / 4"
         )
 
-        st.write("**Your class:** " + (student[2] or "Not set"))
-
-        a, b = st.columns(2)
-
-        a.metric("Correct Answers ⭐", total)
-        b.metric("Games With Scores 🎮", len(scores))
-
-        st.subheader("🌱 Your Game Progress")
-
-        if scores:
-            for game_name, points in scores:
-                st.markdown(
-                    '<div class="pill"><b>🎯 '
-                    + html.escape(game_name)
-                    + '</b><span style="float:right;color:#7558db;'
-                    + 'font-weight:900">'
-                    + str(points)
-                    + ' points</span></div>',
-                    unsafe_allow_html=True
-                )
-        else:
-            st.info(
-                "Play your first game to start earning points!"
-            )
-
-    # ======================================
-    # ADMIN PANEL
-    # ======================================
-
-    elif page == "🛡️ Admin Panel":
-        st.markdown("""
-        <div class="hero">
-            <div style="font-size:35px">🛡️ 📋 ⭐</div>
-            <h1>Admin Panel</h1>
-            <p>Review student accounts and learning scores.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        admin_password = os.environ.get(
-            "LITTLE_MINDS_ADMIN_PASSWORD"
+        st.write(
+            f"Turns: {st.session_state.memory_moves}"
         )
 
-        if not admin_pa
+        if st.session_state.memory_feedback:
+            st.info(st.session_state.memory_feedback)
+
+        if st.button(
+            "🔀 Restart Memory",
+            use_container_width=True
+        ):
+            next_question("Memory")
+            st.rerun()
+
+
+# ================= FOOTER =================
+
+st.divider()
+
+st.caption(
+    "🌟 Learn through play! Practice points are for fun, "
+    "not a measure of intelligence."
+)
