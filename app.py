@@ -76,6 +76,9 @@ if "scores" not in st.session_state:
         "Memory": 0
     }
 
+if "selected_colour" not in st.session_state:
+    st.session_state.selected_colour = None
+
 
 # ================= QUESTION SETUP =================
 
@@ -87,6 +90,7 @@ def setup_question(game):
         st.session_state.target = random.choice(
             list(COLOURS)
         )
+        st.session_state.selected_colour = None
 
     elif game == "Shapes":
         st.session_state.shape_target = random.choice(
@@ -206,7 +210,7 @@ elif st.session_state.page == "Colours":
 
     target = st.session_state.target
 
-    # Upar target colour ka naam dikhai dega.
+    # Target colour ka naam sirf upar dikhega.
     st.subheader(f"Find the {target} colour!")
 
     st.write(
@@ -222,40 +226,41 @@ elif st.session_state.page == "Colours":
 
         with cols[i % 2]:
 
-            # CSS se har option ko coloured box banaya gaya hai.
+            selected = (
+                st.session_state.selected_colour == colour
+            )
+
+            border = (
+                "5px solid #26315F"
+                if selected
+                else "3px solid white"
+            )
+
+            # Coloured box hamesha visible rahega.
+            # Selection par uske around border dikhega.
             st.markdown(
                 f"""
-                <style>
-                div.st-key-colour_{colour} button {{
-                    background-color: {COLOURS[colour]} !important;
-                    color: transparent !important;
-                    min-height: 110px !important;
-                    height: 110px !important;
-                    border-radius: 18px !important;
-                    border: 3px solid white !important;
-                    padding: 0 !important;
-                }}
-
-                div.st-key-colour_{colour} button p {{
-                    visibility: hidden !important;
-                }}
-
-                div.st-key-colour_{colour} button:hover {{
-                    filter: brightness(0.92);
-                    border: 3px solid #26315F !important;
-                }}
-                </style>
+                <div style="
+                    background-color: {COLOURS[colour]};
+                    height: 110px;
+                    border-radius: 18px;
+                    border: {border};
+                    box-shadow: 0 3px 8px #0002;
+                    margin-bottom: 8px;
+                    box-sizing: border-box;
+                "></div>
                 """,
                 unsafe_allow_html=True
             )
 
-            # Sirf coloured box clickable hai; colour ka naam nahi hai.
+            # Button answer select karta hai.
             if st.button(
-                " ",
+                f"Select {colour}",
                 key=f"colour_{colour}",
                 use_container_width=True,
                 disabled=st.session_state.answered
             ):
+                st.session_state.selected_colour = colour
                 answer(colour == target, "Colours")
                 st.rerun()
 
