@@ -45,7 +45,7 @@ div.stButton > button:hover {
 """, unsafe_allow_html=True)
 
 
-    font-weight: bold;
+ font-weight: bold;
 }
 </style>
 """, unsafe_allow_html=True)
