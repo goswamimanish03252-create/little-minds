@@ -805,7 +805,7 @@ else:
                 reset_game()
                 st.rerun()
 
-       elif st.session_state.feedback == "try":
+       elif st.session_state.feedback == "try"
     st.warning(
         "Good try! Click Next Question to try another one."
     )
