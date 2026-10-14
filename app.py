@@ -65,7 +65,7 @@ st.markdown("---")
 st.subheader("🎨 Colour Matching")
 
 st.write(
-    f"Question {st.session_state.question}  |  "
+    f"Question {st.session_state.question} | "
     f"Score: {st.session_state.score}"
 )
 
@@ -80,7 +80,6 @@ st.markdown(
 
 options = list(COLOURS.keys())
 random.Random(st.session_state.question).shuffle(options)
-
 columns = st.columns(2)
 
 for i, colour in enumerate(options):
