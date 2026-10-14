@@ -1,3 +1,4 @@
+
 import random
 import streamlit as st
 
@@ -88,13 +89,13 @@ def setup_question(game):
 
     if game == "Colours":
         st.session_state.target = random.choice(
-            list(COLOURS)
+            list(COLOURS.keys())
         )
         st.session_state.selected_colour = None
 
     elif game == "Shapes":
         st.session_state.shape_target = random.choice(
-            list(SHAPES)
+            list(SHAPES.keys())
         )
 
     elif game == "Counting":
@@ -108,7 +109,6 @@ def setup_question(game):
             ["🐶", "🐱", "🐸", "🦊"] * 2
         )
         random.shuffle(st.session_state.memory_cards)
-
         st.session_state.memory_revealed = []
         st.session_state.memory_matched = []
         st.session_state.memory_moves = 0
@@ -210,15 +210,14 @@ elif st.session_state.page == "Colours":
 
     target = st.session_state.target
 
-    # Target colour ka naam sirf upar dikhega.
     st.subheader(f"Find the {target} colour!")
 
     st.write(
         f"Points: {st.session_state.scores['Colours']}"
     )
 
-    options = list(COLOURS)
-    random.shuffle(options)
+    # Fixed order: boxes won't move when an answer is selected.
+    options = list(COLOURS.keys())
 
     cols = st.columns(2)
 
@@ -236,8 +235,7 @@ elif st.session_state.page == "Colours":
                 else "3px solid white"
             )
 
-            # Coloured box hamesha visible rahega.
-            # Selection par uske around border dikhega.
+            # Coloured box with selection highlight.
             st.markdown(
                 f"""
                 <div style="
@@ -253,7 +251,7 @@ elif st.session_state.page == "Colours":
                 unsafe_allow_html=True
             )
 
-            # Button answer select karta hai.
+            # Clickable answer control.
             if st.button(
                 f"Select {colour}",
                 key=f"colour_{colour}",
@@ -265,14 +263,12 @@ elif st.session_state.page == "Colours":
                 st.rerun()
 
     if st.session_state.feedback:
-
         if st.session_state.feedback.startswith("🎉"):
             st.success(st.session_state.feedback)
         else:
             st.warning(st.session_state.feedback)
 
     if st.session_state.answered:
-
         if st.button(
             "➡️ Next Question",
             use_container_width=True
@@ -296,9 +292,7 @@ elif st.session_state.page == "Shapes":
     cols = st.columns(2)
 
     for i, shape in enumerate(SHAPES):
-
         with cols[i % 2]:
-
             if st.button(
                 f"{SHAPES[shape]} {shape}",
                 key=f"shape_{shape}",
@@ -309,14 +303,12 @@ elif st.session_state.page == "Shapes":
                 st.rerun()
 
     if st.session_state.feedback:
-
         if st.session_state.feedback.startswith("🎉"):
             st.success(st.session_state.feedback)
         else:
             st.warning(st.session_state.feedback)
 
     if st.session_state.answered:
-
         if st.button(
             "➡️ Next Shape",
             use_container_width=True
@@ -357,9 +349,7 @@ elif st.session_state.page == "Counting":
     cols = st.columns(5)
 
     for number in range(1, 6):
-
         with cols[number - 1]:
-
             if st.button(
                 str(number),
                 key=f"number_{number}",
@@ -370,14 +360,12 @@ elif st.session_state.page == "Counting":
                 st.rerun()
 
     if st.session_state.feedback:
-
         if st.session_state.feedback.startswith("🎉"):
             st.success(st.session_state.feedback)
         else:
             st.warning(st.session_state.feedback)
 
     if st.session_state.answered:
-
         if st.button(
             "➡️ Next Question",
             use_container_width=True
@@ -411,11 +399,9 @@ elif st.session_state.page == "Memory":
             st.rerun()
 
     else:
-
         cols = st.columns(4)
 
         for i, card in enumerate(cards):
-
             with cols[i % 4]:
 
                 if i in matched or i in revealed:
@@ -429,7 +415,6 @@ elif st.session_state.page == "Memory":
                     use_container_width=True,
                     disabled=(i in matched)
                 ):
-
                     if i not in matched and i not in revealed:
 
                         if len(revealed) == 2:
@@ -438,13 +423,10 @@ elif st.session_state.page == "Memory":
                         revealed.append(i)
 
                         if len(revealed) == 2:
-
                             first, second = revealed
-
                             st.session_state.memory_moves += 1
 
                             if cards[first] == cards[second]:
-
                                 matched.extend(revealed)
                                 revealed.clear()
 
@@ -453,9 +435,7 @@ elif st.session_state.page == "Memory":
                                 st.session_state.memory_feedback = (
                                     "🎉 Match found!"
                                 )
-
                             else:
-
                                 st.session_state.memory_feedback = (
                                     "Keep looking! Select another card."
                                 )
@@ -465,7 +445,6 @@ elif st.session_state.page == "Memory":
         st.write(
             f"Pairs found: {len(matched) // 2} / 4"
         )
-
         st.write(
             f"Turns: {st.session_state.memory_moves}"
         )
