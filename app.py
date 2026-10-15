@@ -600,4 +600,8 @@ elif st.session_state.page == "Memory":
         elif st.session_state.memory_feedback == "wrong":
             st.info("Not a match yet. Remember the cards and try again!")
 
-        if st.button("🔀 Restart Memory
+        
+if st.button("🔀 Restart Memory"):
+    st.session_state.memory_cards = []
+    st.rerun()
+    
